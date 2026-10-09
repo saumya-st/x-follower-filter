@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>X Follower Filter · Privacy Policy</title>
+  <link rel="stylesheet" href="ui/styles.css" />
+  <style>main{max-width:720px;margin:0 auto;padding:32px 16px;line-height:1.6}h2{margin-top:24px;text-transform:none;font-size:15px;color:var(--text)}</style>
+</head>
+<body>
+<main>
+  <h1>Privacy Policy — X Follower Filter</h1>
+  <p class="muted small">Last updated: 9 October 2026</p>
+
+  <h2>What the extension does</h2>
+  <p>X Follower Filter reads the follower and following lists you open on x.com while you are logged in, lets you search and group those accounts, and, only when you explicitly ask, clicks X's own "Remove this follower" or "Unfollow" controls on your behalf, one account at a time. Those clicks happen in a separate, inactive x.com tab that the extension opens in your browser and closes again when it is done; you can view that tab at any time from the panel.</p>
+
+  <h2>Data we collect</h2>
+  <p><strong>None.</strong> The developer operates no server and receives no data from this extension. There is no analytics, telemetry, or crash reporting.</p>
+
+  <h2>Data stored on your device</h2>
+  <ul>
+    <li>A short history of which accounts were in your lists at each scan (handles only), so the extension can show who is new and who left.</li>
+    <li>Public profile fields of accounts in lists you scan: handle, display name, bio, avatar URL, verified / protected flags and whether they follow you.</li>
+    <li>Your label definitions, pacing settings, protected-accounts list and, if you add one, your Anthropic API key.</li>
+    <li>AI labels returned by Anthropic for accounts you chose to label.</li>
+  </ul>
+  <p>All of this lives in Chrome's extension storage on your computer. It is never synced to another device and you can delete it at any time from the Options page ("Delete all scanned data") or by removing the extension.</p>
+
+  <h2>Optional AI labelling</h2>
+  <p>If you add your own Anthropic API key and press "Run" under "Label with AI", the handle, display name and bio of the accounts you selected are sent to <code>api.anthropic.com</code> so Claude can assign one of your labels. This happens only on your explicit action, uses your key, and is billed to your Anthropic account. See <a href="https://www.anthropic.com/privacy" target="_blank" rel="noreferrer">Anthropic's privacy policy</a> for how they handle API data. No other third party ever receives any data.</p>
+
+  <h2>Permissions</h2>
+  <ul>
+    <li><code>x.com</code>, <code>twitter.com</code>: to read the lists you open and to click X's own menus when you start a job.</li>
+    <li><code>api.anthropic.com</code> (optional, granted by you in Options): AI labelling.</li>
+    <li><code>storage</code>: save scans and settings locally. <code>alarms</code>: resume the queue when the hourly limit lifts and close the background tab. <code>sidePanel</code>: show the panel next to x.com. <code>activeTab</code>: find the x.com tab you are working in.</li>
+  </ul>
+
+  <h2>Your responsibility</h2>
+  <p>The extension acts only on lists belonging to the account you are logged into and only after you select accounts and confirm. Automated interaction with X may be restricted by X's terms of service; the extension paces actions and offers a dry run, but you use it at your own risk.</p>
+
+  <h2>Contact</h2>
+  <p>Questions: open an issue on the project's repository or contact the developer through the Chrome Web Store listing.</p>
+</main>
+</body>
+</html>

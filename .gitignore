@@ -1,0 +1,19 @@
+# dependencies & build output
+node_modules/
+dist/
+release/
+
+# local tooling
+.vscode/
+.idea/
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# never commit secrets or local data
+.env
+.env.*
+*.pem
+*.key
+*.crx

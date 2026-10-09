@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>X Follower Filter</title>
+  <link rel="stylesheet" href="../styles.css" />
+  <style>
+    .wrap { display: flex; flex-direction: column; height: 100vh; }
+    header { padding: 10px 12px 8px; border-bottom: 1px solid var(--border); }
+    .tabs { display: flex; gap: 4px; background: var(--bg2); border-radius: 999px; padding: 3px; }
+    .tabs button { flex: 1; border: 0; background: transparent; border-radius: 999px; padding: 5px 0; }
+    .tabs button.on { background: var(--bg3); }
+    .filters { padding: 8px 12px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .chip.preset { border-style: dashed; }
+    .chip.preset.on { border-style: solid; }
+    .list { flex: 1; overflow: auto; }
+    .rowitem { display: grid; grid-template-columns: 22px 36px 1fr auto; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); align-items: start; }
+    .rowitem:hover { background: var(--bg2); }
+    .rowitem.sel { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+    .rowitem.pending { opacity: .6; }
+    .rowitem.queued { opacity: .75; }
+    .rowitem input { margin-top: 10px; }
+    .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--bg3); object-fit: cover; }
+    .name { font-weight: 700; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+    .handle { color: var(--muted); font-weight: 400; }
+    .bio { color: var(--text); margin-top: 2px; white-space: pre-wrap; word-break: break-word; }
+    .meta { margin-top: 3px; display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+    .badge { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 0 5px; }
+    .badge.bot { color: var(--warn); border-color: var(--warn); }
+    .act { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; min-width: 64px; }
+    .act button { padding: 3px 9px; font-size: 12px; }
+    .act .status { font-size: 11px; color: var(--muted); white-space: nowrap; }
+    .empty { padding: 24px 16px; text-align: center; color: var(--muted); }
+    footer { border-top: 1px solid var(--border); padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 8px; background: var(--bg); }
+    .counts { font-variant-numeric: tabular-nums; }
+    details summary { cursor: pointer; font-weight: 600; }
+    .sentinel { height: 1px; }
+    .qstrip { display: flex; flex-direction: column; gap: 6px; }
+    .qlist { max-height: 160px; overflow: auto; margin-top: 6px; }
+    .qrow { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px dashed var(--border); font-size: 12px; }
+    .qrow .r { color: var(--muted); }
+    .section { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+    .section h3 { margin: 0 0 6px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+    .modal { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px; width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 10px; }
+    .modal h2 { color: var(--text); text-transform: none; font-size: 15px; letter-spacing: 0; }
+    .diffbadge { font-size: 12px; color: var(--muted); }
+    .diffbadge b.up { color: var(--ok); } .diffbadge b.down { color: var(--danger); }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="row between">
+      <h1>X Follower Filter</h1>
+      <button class="ghost sm" id="btnOptions" title="Options">⚙︎</button>
+    </div>
+    <div class="row between" style="margin-top:8px">
+      <div class="muted small" id="who">Open x.com and log in.</div>
+      <div class="diffbadge" id="diffBadge"></div>
+    </div>
+    <div class="tabs" style="margin-top:8px">
+      <button id="tabFollowers" class="on" data-tab="followers">Followers <span class="counts" id="cntFollowers"></span></button>
+      <button id="tabFollowing" data-tab="following">Following <span class="counts" id="cntFollowing"></span></button>
+      <button id="tabChanges" data-tab="changes">Changes</button>
+    </div>
+    <div class="row between" style="margin-top:8px" id="scanRow">
+      <div class="small muted" id="scanInfo">Not scanned yet.</div>
+      <div class="row">
+        <button class="primary sm" id="btnScan">Scan</button>
+        <button class="danger sm" id="btnStopScan" hidden>Stop</button>
+      </div>
+    </div>
+    <div class="progress" id="scanBar" hidden style="margin-top:6px"><div></div></div>
+    <div id="banner" hidden style="margin-top:8px"></div>
+  </header>
+
+  <div class="filters" id="filters">
+    <input type="search" id="q" placeholder="Search handle, name, bio…" />
+    <div class="chips" id="presetChips"></div>
+    <div class="chips" id="labelChips"></div>
+    <div class="row small">
+      <label class="inline"><input type="checkbox" id="fUnlabeled" /> Unlabeled</label>
+      <label class="inline"><input type="checkbox" id="fFollowsYou" /> <span id="fFollowsYouText">Follows you</span></label>
+      <label class="inline"><input type="checkbox" id="fNoBio" /> No bio</label>
+      <label class="inline"><input type="checkbox" id="fVerified" /> Verified</label>
+      <label class="inline"><input type="checkbox" id="fNoAvatar" /> Default avatar</label>
+      <label class="inline"><input type="checkbox" id="fBots" /> Likely bots</label>
+    </div>
+    <div class="row between small">
+      <span class="muted" id="matchInfo">0 accounts</span>
+      <span class="row">
+        <button class="danger sm" id="btnAllShown" disabled>Remove all shown</button>
+        <button class="ghost sm" id="btnSelectAll" title="Select all shown">Select</button>
+        <button class="ghost sm" id="btnClearSel" title="Clear selection">Clear</button>
+        <button class="ghost sm" id="btnExport" title="Export shown accounts as CSV">CSV</button>
+      </span>
+    </div>
+  </div>
+
+  <div class="list" id="list"></div>
+  <div class="list" id="changes" hidden></div>
+
+  <footer>
+    <div class="card qstrip" id="queueBox" hidden></div>
+    <details id="aiBox">
+      <summary>Label with AI <span class="muted small" id="aiSummary"></span></summary>
+      <div style="margin-top:8px" class="row between">
+        <label class="small">Scope
+          <select id="aiScope" style="width:auto;display:inline-block;margin-left:4px">
+            <option value="unlabeled">Shown accounts without a label</option>
+            <option value="all">All shown accounts</option>
+          </select>
+        </label>
+        <button class="sm" id="btnAiEstimate">Estimate</button>
+        <button class="primary sm" id="btnAiRun" disabled>Run</button>
+        <button class="danger sm" id="btnAiCancel" hidden>Cancel</button>
+      </div>
+      <div class="small muted" id="aiInfo" style="margin-top:6px"></div>
+      <div class="progress" id="aiBar" hidden style="margin-top:6px"><div></div></div>
+    </details>
+    <div class="row between" id="selRow">
+      <span class="small muted" id="selInfo">0 selected</span>
+      <button class="primary sm" id="btnAct" disabled>Remove selected</button>
+    </div>
+  </footer>
+</div>
+<div id="modalHost"></div>
+<script type="module" src="panel.js"></script>
+</body>
+</html>

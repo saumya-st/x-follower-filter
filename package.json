@@ -1,0 +1,26 @@
+{
+  "name": "x-follower-filter",
+  "version": "0.2.0",
+  "description": "Scan your X (Twitter) followers and following, group them by bio keywords or AI labels, review, then remove or unfollow the ones you choose.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "zip": "node scripts/build.mjs && node scripts/zip.mjs",
+    "icons": "node scripts/icons.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/chrome": "^0.3.4",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.132.1",
+    "zod": "^4.6.5"
+  }
+}

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>X Follower Filter · Options</title>
+  <link rel="stylesheet" href="../styles.css" />
+  <style>
+    main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; display: flex; flex-direction: column; gap: 18px; }
+    section.card { display: flex; flex-direction: column; gap: 10px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .label-row { display: grid; grid-template-columns: 34px 1fr 3fr 90px; gap: 8px; align-items: start; }
+    .label-row input[type="color"] { width: 34px; height: 34px; padding: 0; border: 0; background: transparent; cursor: pointer; }
+    .label-row .kw { grid-column: 2 / -1; }
+    input[type="range"] { width: 100%; }
+    @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } .label-row { grid-template-columns: 34px 1fr 90px; } }
+    footer.save { position: sticky; bottom: 0; background: var(--bg); padding: 12px 0; border-top: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+<main>
+  <div class="row between">
+    <h1>X Follower Filter · Options</h1>
+    <span class="muted small" id="status"></span>
+  </div>
+
+  <section class="card">
+    <h2>Labels &amp; keywords</h2>
+    <p class="small muted" style="margin:0">Each label matches when any keyword appears in an account's bio, name or handle (case-insensitive, whole words). The hint is only used by the AI labeller. Separate keywords with commas.</p>
+    <div id="labels"></div>
+    <div class="row">
+      <button class="sm" id="addLabel">+ Add label</button>
+      <button class="sm ghost" id="resetLabels">Reset to defaults</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Pacing &amp; safety</h2>
+    <p class="small muted" style="margin:0">Actions run in a hidden background tab that clicks through X's own menus, one account at a time. Keep the pauses generous; X rate-limits aggressive accounts.</p>
+    <div class="grid">
+      <label>Min pause between actions (seconds)<input type="number" id="minDelay" min="2" max="120" step="1" /></label>
+      <label>Max pause between actions (seconds)<input type="number" id="maxDelay" min="2" max="180" step="1" /></label>
+      <label>Max actions per hour<input type="number" id="maxPerHour" min="1" max="500" step="1" /></label>
+      <label>Likely-bot threshold: <span id="botThresholdVal"></span>/100
+        <input type="range" id="botThreshold" min="30" max="90" step="5" />
+      </label>
+    </div>
+    <label class="inline small"><input type="checkbox" id="keepWorkerTab" /> Keep the background worker tab open after the queue finishes (otherwise it closes after 2 idle minutes)</label>
+    <label>Protected accounts (never removed or unfollowed, one per line or comma-separated)
+      <textarea id="protected" placeholder="@friend&#10;@colleague"></textarea>
+    </label>
+  </section>
+
+  <section class="card">
+    <h2>AI labelling (optional)</h2>
+    <p class="small muted" style="margin:0">Bios are sent in batches to Anthropic's API using <em>your</em> key. The key is stored only in this browser's extension storage and only ever sent to api.anthropic.com. Nothing is sent anywhere until you press Run in the panel.</p>
+    <div class="grid">
+      <label>Anthropic API key
+        <input type="password" id="apiKey" placeholder="sk-ant-…" autocomplete="off" />
+      </label>
+      <label>Model
+        <select id="model"></select>
+      </label>
+    </div>
+    <div class="row">
+      <label class="inline small"><input type="checkbox" id="aiAllowOther" /> Allow an "Other" label for accounts that fit none of yours</label>
+    </div>
+    <div class="row">
+      <button class="sm" id="grantPerm">Allow access to api.anthropic.com</button>
+      <span class="small muted" id="permStatus"></span>
+    </div>
+    <div class="small muted" id="pricing"></div>
+  </section>
+
+  <section class="card">
+    <h2>Data</h2>
+    <p class="small muted" style="margin:0">Scanned lists, scan history and AI labels live in this browser only. <a href="../../PRIVACY.html" target="_blank">Privacy policy</a>.</p>
+    <div class="row">
+      <button class="sm danger" id="clearData">Delete all scanned data, history &amp; AI labels</button>
+    </div>
+  </section>
+
+  <footer class="save row between">
+    <span class="small muted">Changes apply immediately to the panel after saving.</span>
+    <button class="primary" id="save">Save</button>
+  </footer>
+</main>
+<script type="module" src="options.js"></script>
+</body>
+</html>
