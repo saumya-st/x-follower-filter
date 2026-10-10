@@ -31,10 +31,10 @@ Load it: `chrome://extensions` → Developer mode → **Load unpacked** → pick
 | Rules | `src/shared/rules.ts` | Keyword matcher (word boundaries, unicode folding) and free-text search. |
 | Claude | `src/background/claude.ts` | Batched bio classification with structured output. |
 | Service worker | `src/background/service-worker.ts` | Message router, snapshot storage, scan diffing, AI run. |
-| Panel | `src/ui/panel/` | Side panel: scan, presets, filters, one-click remove with undo, queue, Changes tab. |
+| Panel | `src/ui/panel/` | Side panel: onboarding, scan, quick views + filter drawer, one-click remove with undo, selection bar, queue strip, Changes dashboard, built-in help. |
 | Options | `src/ui/options/` | Labels, API key, pacing, protected accounts. |
 
-Flow: **Scan** → filter by preset / label / search / flags → click **Remove** on a row (5 s Undo) or **Remove all shown** → items go to a queue that a hidden background x.com tab works through, one profile at a time. Your own tab is never touched. The **Changes** tab shows new followers, who unfollowed you and who does not follow back.
+Flow: **Scan** → narrow the list with a **Quick view** (Likely bots, Spam, Crypto…) or the **Filters** drawer (categories + traits + search) → click **Remove** on a row (5 s Undo), or tick rows and use the action bar at the bottom → items go to a queue that a hidden background x.com tab works through, one profile at a time. Your own tab is never touched. The **Changes** tab is a small dashboard: new followers, who unfollowed you, who does not follow back, and who you don't follow back. The **?** button in the panel explains all of this in-app.
 
 ## Safety notes
 

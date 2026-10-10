@@ -5,128 +5,141 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>X Follower Filter</title>
   <link rel="stylesheet" href="../styles.css" />
-  <style>
-    .wrap { display: flex; flex-direction: column; height: 100vh; }
-    header { padding: 10px 12px 8px; border-bottom: 1px solid var(--border); }
-    .tabs { display: flex; gap: 4px; background: var(--bg2); border-radius: 999px; padding: 3px; }
-    .tabs button { flex: 1; border: 0; background: transparent; border-radius: 999px; padding: 5px 0; }
-    .tabs button.on { background: var(--bg3); }
-    .filters { padding: 8px 12px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
-    .chips { display: flex; gap: 6px; flex-wrap: wrap; }
-    .chip.preset { border-style: dashed; }
-    .chip.preset.on { border-style: solid; }
-    .list { flex: 1; overflow: auto; }
-    .rowitem { display: grid; grid-template-columns: 22px 36px 1fr auto; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); align-items: start; }
-    .rowitem:hover { background: var(--bg2); }
-    .rowitem.sel { background: color-mix(in srgb, var(--accent) 12%, transparent); }
-    .rowitem.pending { opacity: .6; }
-    .rowitem.queued { opacity: .75; }
-    .rowitem input { margin-top: 10px; }
-    .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--bg3); object-fit: cover; }
-    .name { font-weight: 700; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-    .handle { color: var(--muted); font-weight: 400; }
-    .bio { color: var(--text); margin-top: 2px; white-space: pre-wrap; word-break: break-word; }
-    .meta { margin-top: 3px; display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
-    .badge { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 0 5px; }
-    .badge.bot { color: var(--warn); border-color: var(--warn); }
-    .act { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; min-width: 64px; }
-    .act button { padding: 3px 9px; font-size: 12px; }
-    .act .status { font-size: 11px; color: var(--muted); white-space: nowrap; }
-    .empty { padding: 24px 16px; text-align: center; color: var(--muted); }
-    footer { border-top: 1px solid var(--border); padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 8px; background: var(--bg); }
-    .counts { font-variant-numeric: tabular-nums; }
-    details summary { cursor: pointer; font-weight: 600; }
-    .sentinel { height: 1px; }
-    .qstrip { display: flex; flex-direction: column; gap: 6px; }
-    .qlist { max-height: 160px; overflow: auto; margin-top: 6px; }
-    .qrow { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px dashed var(--border); font-size: 12px; }
-    .qrow .r { color: var(--muted); }
-    .section { padding: 10px 12px; border-bottom: 1px solid var(--border); }
-    .section h3 { margin: 0 0 6px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
-    .modal { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px; width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 10px; }
-    .modal h2 { color: var(--text); text-transform: none; font-size: 15px; letter-spacing: 0; }
-    .diffbadge { font-size: 12px; color: var(--muted); }
-    .diffbadge b.up { color: var(--ok); } .diffbadge b.down { color: var(--danger); }
-  </style>
+  <link rel="stylesheet" href="panel.css" />
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div class="row between">
-      <h1>X Follower Filter</h1>
-      <button class="ghost sm" id="btnOptions" title="Options">⚙︎</button>
-    </div>
-    <div class="row between" style="margin-top:8px">
-      <div class="muted small" id="who">Open x.com and log in.</div>
-      <div class="diffbadge" id="diffBadge"></div>
-    </div>
-    <div class="tabs" style="margin-top:8px">
-      <button id="tabFollowers" class="on" data-tab="followers">Followers <span class="counts" id="cntFollowers"></span></button>
-      <button id="tabFollowing" data-tab="following">Following <span class="counts" id="cntFollowing"></span></button>
-      <button id="tabChanges" data-tab="changes">Changes</button>
-    </div>
-    <div class="row between" style="margin-top:8px" id="scanRow">
-      <div class="small muted" id="scanInfo">Not scanned yet.</div>
-      <div class="row">
-        <button class="primary sm" id="btnScan">Scan</button>
-        <button class="danger sm" id="btnStopScan" hidden>Stop</button>
+<div class="app">
+
+  <!-- ===== Header ===== -->
+  <header class="top">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">✕</span>
+      <div class="brand-text">
+        <h1>Follower Filter</h1>
+        <div class="who" id="who"><span class="dot"></span><span id="whoText">Checking…</span></div>
       </div>
     </div>
-    <div class="progress" id="scanBar" hidden style="margin-top:6px"><div></div></div>
-    <div id="banner" hidden style="margin-top:8px"></div>
+    <div class="top-actions">
+      <button class="icon" id="btnHelp" title="How it works" aria-label="How it works">?</button>
+      <button class="icon" id="btnOptions" title="Settings" aria-label="Settings">⚙</button>
+    </div>
   </header>
 
-  <div class="filters" id="filters">
-    <input type="search" id="q" placeholder="Search handle, name, bio…" />
-    <div class="chips" id="presetChips"></div>
-    <div class="chips" id="labelChips"></div>
-    <div class="row small">
-      <label class="inline"><input type="checkbox" id="fUnlabeled" /> Unlabeled</label>
-      <label class="inline"><input type="checkbox" id="fFollowsYou" /> <span id="fFollowsYouText">Follows you</span></label>
-      <label class="inline"><input type="checkbox" id="fNoBio" /> No bio</label>
-      <label class="inline"><input type="checkbox" id="fVerified" /> Verified</label>
-      <label class="inline"><input type="checkbox" id="fNoAvatar" /> Default avatar</label>
-      <label class="inline"><input type="checkbox" id="fBots" /> Likely bots</label>
-    </div>
-    <div class="row between small">
-      <span class="muted" id="matchInfo">0 accounts</span>
-      <span class="row">
-        <button class="danger sm" id="btnAllShown" disabled>Remove all shown</button>
-        <button class="ghost sm" id="btnSelectAll" title="Select all shown">Select</button>
-        <button class="ghost sm" id="btnClearSel" title="Clear selection">Clear</button>
-        <button class="ghost sm" id="btnExport" title="Export shown accounts as CSV">CSV</button>
-      </span>
-    </div>
-  </div>
+  <nav class="tabs" aria-label="Lists">
+    <button id="tabFollowers" class="on" data-tab="followers"><span>Followers</span><span class="count" id="cntFollowers"></span></button>
+    <button id="tabFollowing" data-tab="following"><span>Following</span><span class="count" id="cntFollowing"></span></button>
+    <button id="tabChanges" data-tab="changes"><span>Changes</span><span class="pip" id="changesPip" hidden></span></button>
+  </nav>
 
-  <div class="list" id="list"></div>
-  <div class="list" id="changes" hidden></div>
+  <div id="toast" class="toast" hidden></div>
 
-  <footer>
-    <div class="card qstrip" id="queueBox" hidden></div>
-    <details id="aiBox">
-      <summary>Label with AI <span class="muted small" id="aiSummary"></span></summary>
-      <div style="margin-top:8px" class="row between">
-        <label class="small">Scope
-          <select id="aiScope" style="width:auto;display:inline-block;margin-left:4px">
-            <option value="unlabeled">Shown accounts without a label</option>
-            <option value="all">All shown accounts</option>
-          </select>
-        </label>
-        <button class="sm" id="btnAiEstimate">Estimate</button>
-        <button class="primary sm" id="btnAiRun" disabled>Run</button>
-        <button class="danger sm" id="btnAiCancel" hidden>Cancel</button>
+  <!-- ===== List view (Followers / Following) ===== -->
+  <main class="view" id="viewList">
+
+    <!-- Scan status strip -->
+    <div class="scanbar" id="scanBar">
+      <div class="scan-text">
+        <span id="scanInfo">Not scanned yet</span>
+        <span class="muted small" id="scanSub"></span>
       </div>
-      <div class="small muted" id="aiInfo" style="margin-top:6px"></div>
-      <div class="progress" id="aiBar" hidden style="margin-top:6px"><div></div></div>
-    </details>
-    <div class="row between" id="selRow">
-      <span class="small muted" id="selInfo">0 selected</span>
-      <button class="primary sm" id="btnAct" disabled>Remove selected</button>
+      <button class="sm" id="btnScan">Scan</button>
+      <button class="sm danger" id="btnStopScan" hidden>Stop</button>
+      <div class="progress thin" id="scanProgress" hidden><div></div></div>
+    </div>
+
+    <!-- Empty / onboarding state -->
+    <section class="onboard" id="onboard" hidden>
+      <div class="onboard-icon">👥</div>
+      <h2 id="onboardTitle">Scan your followers</h2>
+      <p class="muted" id="onboardText">The extension opens your followers page on x.com and scrolls through it, the same way you would. Nothing is uploaded anywhere.</p>
+      <ol class="steps">
+        <li id="stepLogin"><span class="step-mark"></span><span>Open <b>x.com</b> in a tab and log in</span></li>
+        <li id="stepScan"><span class="step-mark"></span><span>Press <b>Scan</b> and wait for it to finish</span></li>
+        <li><span class="step-mark"></span><span>Filter, review, then remove or unfollow</span></li>
+      </ol>
+      <button class="primary lg" id="btnScanBig">Scan followers</button>
+    </section>
+
+    <!-- Toolbar -->
+    <div class="toolbar" id="toolbar">
+      <div class="searchrow">
+        <div class="search">
+          <span class="search-icon" aria-hidden="true">⌕</span>
+          <input type="search" id="q" placeholder="Search name, handle or bio" autocomplete="off" />
+        </div>
+        <button class="sm filter-toggle" id="btnFilters" aria-expanded="false"><span>Filters</span><span class="fcount" id="filterCount" hidden></span></button>
+      </div>
+
+      <div class="quick" id="quick">
+        <span class="quick-label">Quick views</span>
+        <div class="quick-scroll" id="presetChips"></div>
+      </div>
+
+      <div class="drawer" id="drawer" hidden>
+        <div class="drawer-sec">
+          <div class="drawer-head">Categories <span class="muted small">from bio keywords (edit in Settings) and AI labels</span></div>
+          <div class="chips" id="labelChips"></div>
+        </div>
+        <div class="drawer-sec">
+          <div class="drawer-head">Only show accounts that…</div>
+          <div class="checks">
+            <label><input type="checkbox" id="fBots" /><span>Look like bots <span class="muted">· no bio, default avatar, numeric handle, spam words</span></span></label>
+            <label><input type="checkbox" id="fUnlabeled" /><span>Match no category</span></label>
+            <label><input type="checkbox" id="fFollowsYou" /><span id="fFollowsYouText">Follow you</span></label>
+            <label><input type="checkbox" id="fNoBio" /><span>Have no bio</span></label>
+            <label><input type="checkbox" id="fNoAvatar" /><span>Use the default avatar</span></label>
+            <label><input type="checkbox" id="fVerified" /><span>Are verified</span></label>
+          </div>
+        </div>
+        <div class="drawer-foot">
+          <button class="sm ghost" id="btnClearFilters">Clear all filters</button>
+          <button class="sm" id="btnCloseDrawer">Done</button>
+        </div>
+      </div>
+
+      <div class="summary">
+        <span id="matchInfo" class="small"></span>
+        <span class="summary-actions">
+          <button class="link" id="btnResetFilters" hidden>Clear filters</button>
+          <button class="sm ghost" id="btnSelectAll">Select all</button>
+          <button class="icon sm" id="btnMore" title="More" aria-label="More actions">⋯</button>
+        </span>
+      </div>
+    </div>
+
+    <div class="list" id="list"></div>
+  </main>
+
+  <!-- ===== Changes view ===== -->
+  <main class="view" id="viewChanges" hidden>
+    <div class="changes" id="changes"></div>
+  </main>
+
+  <!-- ===== Bottom strips ===== -->
+  <footer class="bottom">
+    <div class="strip ai" id="aiStrip" hidden>
+      <span class="strip-icon">✨</span>
+      <span class="strip-text" id="aiText"></span>
+      <button class="sm" id="btnAiCancel" hidden>Cancel</button>
+      <button class="sm ghost" id="btnAiDismiss" hidden>Dismiss</button>
+      <div class="progress thin" id="aiBar" hidden><div></div></div>
+    </div>
+    <div class="strip queue" id="queueStrip" hidden>
+      <span class="strip-icon" id="queueDot">●</span>
+      <span class="strip-text" id="queueText"></span>
+      <button class="sm" id="btnQueuePause" hidden>Pause</button>
+      <button class="sm primary" id="btnQueueResume" hidden>Resume</button>
+      <button class="sm ghost" id="btnQueueDetails">Details</button>
+    </div>
+    <div class="strip select" id="selBar" hidden>
+      <span class="strip-text" id="selInfo"></span>
+      <button class="sm ghost" id="btnClearSel">Clear</button>
+      <button class="sm danger solid" id="btnAct">Remove</button>
     </div>
   </footer>
 </div>
+
+<div id="menuHost"></div>
 <div id="modalHost"></div>
 <script type="module" src="panel.js"></script>
 </body>
