@@ -1,10 +1,12 @@
-import type { Account, AiLabel, ListKind, Queue, ScanHistoryEntry, ScanSnapshot, Settings } from "./types";
+import type { Account, AiLabel, ListKind, Queue, ScanHistoryEntry, ScanSnapshot, Settings, WatchState } from "./types";
+import { emptyWatch } from "./watch";
 import { DEFAULT_SETTINGS } from "./defaults";
 import { emptyQueue } from "./queue";
 
 const SETTINGS_KEY = "settings";
 const QUEUE_KEY = "queue";
 const AI_KEY = "aiLabels";
+const WATCH_KEY = "watch";
 
 export function snapshotKey(owner: string, list: ListKind): string {
   return `snapshot:${owner.toLowerCase()}:${list}`;
@@ -106,6 +108,15 @@ export async function getAiLabels(): Promise<AiLabelMap> {
 
 export async function saveAiLabels(map: AiLabelMap): Promise<void> {
   await chrome.storage.local.set({ [AI_KEY]: map });
+}
+
+export async function getWatch(): Promise<WatchState> {
+  const r = await chrome.storage.local.get(WATCH_KEY);
+  return { ...emptyWatch(), ...((r[WATCH_KEY] as Partial<WatchState> | undefined) ?? {}) };
+}
+
+export async function saveWatch(w: WatchState): Promise<void> {
+  await chrome.storage.local.set({ [WATCH_KEY]: w });
 }
 
 export async function clearAllData(): Promise<void> {

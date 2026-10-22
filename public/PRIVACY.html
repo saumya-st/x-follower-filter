@@ -30,11 +30,14 @@
   <h2>Optional AI labelling</h2>
   <p>If you add your own Anthropic API key and press "Run" under "Label with AI", the handle, display name and bio of the accounts you selected are sent to <code>api.anthropic.com</code> so Claude can assign one of your labels. This happens only on your explicit action, uses your key, and is billed to your Anthropic account. See <a href="https://www.anthropic.com/privacy" target="_blank" rel="noreferrer">Anthropic's privacy policy</a> for how they handle API data. No other third party ever receives any data.</p>
 
+  <h2>Unfollow alerts (off by default)</h2>
+  <p>If you turn on Unfollow alerts in Options, the extension periodically opens your own followers page on x.com in a small background window, rescans it, and compares the result with your last scan. The result is stored locally and shown as a badge and, if you allow it, a desktop notification. Nothing is sent anywhere.</p>
+
   <h2>Permissions</h2>
   <ul>
     <li><code>x.com</code>, <code>twitter.com</code>: to read the lists you open and to click X's own menus when you start a job.</li>
     <li><code>api.anthropic.com</code> (optional, granted by you in Options): AI labelling.</li>
-    <li><code>storage</code>: save scans and settings locally. <code>alarms</code>: resume the queue when the hourly limit lifts and close the background tab. <code>sidePanel</code>: show the panel next to x.com. <code>activeTab</code>: find the x.com tab you are working in.</li>
+    <li><code>storage</code>: save scans and settings locally. <code>alarms</code>: resume the queue when the hourly limit lifts and close the background tab. <code>sidePanel</code>: show the panel next to x.com. <code>activeTab</code>: find the x.com tab you are working in. <code>notifications</code>: tell you who unfollowed you, only if you turn on Unfollow alerts.</li>
   </ul>
 
   <h2>Your responsibility</h2>

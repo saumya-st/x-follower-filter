@@ -128,6 +128,29 @@ export interface Settings {
   botThreshold: number;
   /** Keep the hidden worker tab open after the queue drains. */
   keepWorkerTab: boolean;
+  /** Unfollow alerts: periodically rescan followers in a small background window. */
+  watchEnabled: boolean;
+  /** Hours between automatic checks. */
+  watchIntervalHours: number;
+  /** Show a desktop notification when someone unfollowed. */
+  watchNotify: boolean;
+}
+
+/** Persistent state of the unfollow-alert watcher. */
+export interface WatchState {
+  /** Account whose followers are watched (set when enabled). */
+  owner: string | null;
+  lastRunAt?: number;
+  lastError?: string;
+  /** When the next automatic check is due. */
+  nextRunAt?: number;
+  /** Handles that unfollowed since the user last looked at the Changes tab (newest first). */
+  unseenLeft: string[];
+  /** Number of new followers since the user last looked. */
+  unseenNew: number;
+  running: boolean;
+  /** Window the running check scans in, so it can be closed if the service worker restarts mid-check. */
+  windowId?: number;
 }
 
 export interface ScanProgress {

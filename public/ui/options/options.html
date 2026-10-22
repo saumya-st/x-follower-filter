@@ -52,6 +52,18 @@
   </section>
 
   <section class="card">
+    <h2>Unfollow alerts</h2>
+    <p class="small muted" style="margin:0">Every few hours, rescan your followers in a small background window and tell you who unfollowed. Needs a browser window open and x.com logged in; a check takes a few minutes for large accounts. The window closes itself when done.</p>
+    <label class="inline small"><input type="checkbox" id="watchEnabled" /> Check my followers automatically</label>
+    <div class="grid">
+      <label>How often
+        <select id="watchInterval"></select>
+      </label>
+    </div>
+    <label class="inline small"><input type="checkbox" id="watchNotify" /> Show a desktop notification when someone unfollows (the icon badge always shows the count)</label>
+  </section>
+
+  <section class="card">
     <h2>AI labelling (optional)</h2>
     <p class="small muted" style="margin:0">Bios are sent in batches to Anthropic's API using <em>your</em> key. The key is stored only in this browser's extension storage and only ever sent to api.anthropic.com. Nothing is sent anywhere until you press Run in the panel.</p>
     <div class="grid">

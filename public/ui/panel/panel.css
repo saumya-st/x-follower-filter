@@ -122,6 +122,8 @@ body { overflow: hidden; }
 .cpanel .more { padding: 8px 12px; color: var(--muted); font-size: 12px; background: var(--bg2); }
 .scanmeta { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
 .scanmeta .line { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.watchcard { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.watchcard .err { color: var(--danger); }
 .hintcard { padding: 12px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 
 /* ===== Bottom strips ===== */

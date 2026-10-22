@@ -32,9 +32,12 @@ Load it: `chrome://extensions` → Developer mode → **Load unpacked** → pick
 | Claude | `src/background/claude.ts` | Batched bio classification with structured output. |
 | Service worker | `src/background/service-worker.ts` | Message router, snapshot storage, scan diffing, AI run. |
 | Panel | `src/ui/panel/` | Side panel: onboarding, scan, quick views + filter drawer, one-click remove with undo, selection bar, queue strip, Changes dashboard, built-in help. |
-| Options | `src/ui/options/` | Labels, API key, pacing, protected accounts. |
+| Unfollow alerts | `src/shared/watch.ts` | Pure state for the periodic follower check: unseen departures, badge text, notification copy. |
+| Options | `src/ui/options/` | Labels, API key, pacing, protected accounts, unfollow alerts. |
 
 Flow: **Scan** → narrow the list with a **Quick view** (Likely bots, Spam, Crypto…) or the **Filters** drawer (categories + traits + search) → click **Remove** on a row (5 s Undo), or tick rows and use the action bar at the bottom → items go to a queue that a hidden background x.com tab works through, one profile at a time. Your own tab is never touched. The **Changes** tab is a small dashboard: new followers, who unfollowed you, who does not follow back, and who you don't follow back. The **?** button in the panel explains all of this in-app.
+
+**Unfollow alerts** (off by default, turn on in Options): every 3–48 hours the service worker rescans your followers in a small unfocused window, closes it, and shows who left as a badge on the extension icon and a desktop notification. Logic lives in `src/shared/watch.ts` (pure, unit-tested) and the scheduling in the service worker.
 
 ## Safety notes
 
@@ -52,4 +55,4 @@ No backend, no telemetry, least-privilege permissions, API key kept in local ext
 - Bump `version` in `package.json` and `public/manifest.json`.
 - `npm run zip`, upload `release/*.zip`.
 - Listing: screenshots of the panel, the privacy policy (`dist/PRIVACY.html`, also host it somewhere public and link it in the listing), and a clear note that the tool clicks X's own menus in a background tab, with undo and preview.
-- Permission justifications: `x.com`/`twitter.com` (read lists, click menus), `storage`, `sidePanel`, `activeTab`, optional `api.anthropic.com` (AI labelling with the user's own key).
+- Permission justifications: `x.com`/`twitter.com` (read lists, click menus), `storage`, `sidePanel`, `activeTab`, `alarms` (queue resume, unfollow-alert schedule), `notifications` (unfollow alerts), optional `api.anthropic.com` (AI labelling with the user's own key).

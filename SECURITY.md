@@ -8,6 +8,9 @@ This extension handles a logged-in social account and, optionally, an API key. T
   (a) the user's own clicks on x.com and (b) bios the user explicitly chooses to send to Anthropic with their own key.
 - **Least privilege.** Host access is limited to `x.com` / `twitter.com`. `api.anthropic.com` is an *optional* host
   permission requested only when the user enables AI labelling. No `tabs`, `history`, `cookies` or `<all_urls>`.
+- **Background work is opt-in.** The only thing that runs without a click is Unfollow alerts, which is off by default.
+  When enabled it rescans the user's own followers page in a small unfocused window on a fixed schedule (3 h minimum),
+  never takes any action on X, and only reports changes through the badge and a local notification.
 - **Secrets stay local.** The Anthropic key is stored in `chrome.storage.local` (never `sync`), is only ever sent from
   the extension's service worker to `api.anthropic.com`, is masked in the UI, and is never logged.
 - **No X credentials.** The extension never reads cookies, tokens or passwords. It drives X's own UI inside the user's

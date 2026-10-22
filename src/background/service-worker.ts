@@ -1,12 +1,13 @@
 import type { AiEstimate, AppState, Broadcast, ContentRequest, PanelRequest } from "../shared/messages";
-import type { Account, AiRunProgress, ListKind, PageInfo, Queue, QueueItem, ScanProgress, ScanSnapshot, Settings } from "../shared/types";
-import { AI_BATCH_SIZE, ANTHROPIC_ORIGIN } from "../shared/defaults";
+import type { Account, AiRunProgress, ListKind, PageInfo, Queue, QueueItem, ScanProgress, ScanSnapshot, Settings, WatchState } from "../shared/types";
+import { AI_BATCH_SIZE, ANTHROPIC_ORIGIN, WATCH_INTERVALS_H } from "../shared/defaults";
 import { applyScanDiff } from "../shared/history";
+import { WATCH_ALARM, badgeText, clampIntervalHours, markSeen, notificationText, recordCheck, recordFailure } from "../shared/watch";
 import { addToQueue, clearFinished, nextQueued, removeQueued } from "../shared/queue";
 import { hashText, normalizeHandle } from "../shared/rules";
 import {
-  deleteSnapshot, getAiLabels, getHistory, getQueue, getSettings, getSnapshot, listSnapshots, mergeAccounts, removeAccounts,
-  saveAiLabels, saveHistory, saveQueue, saveSettings, saveSnapshot, snapshotKey,
+  deleteSnapshot, getAiLabels, getHistory, getQueue, getSettings, getSnapshot, getWatch, listSnapshots, mergeAccounts, removeAccounts,
+  saveAiLabels, saveHistory, saveQueue, saveSettings, saveSnapshot, saveWatch, snapshotKey,
 } from "../shared/storage";
 import { classifyBatch, costUsd, countBatchTokens, describeError, estimateOutputTokens, makeClient } from "./claude";
 import {
@@ -18,7 +19,9 @@ const X_URL_RE = /^https:\/\/(x|twitter)\.com\//;
 
 chrome.runtime.onInstalled.addListener(() => {
   void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  void syncWatchSchedule();
 });
+chrome.runtime.onStartup.addListener(() => void syncWatchSchedule());
 
 // ---------- in-memory state (rebuilt lazily after the worker is restarted) ----------
 
@@ -28,6 +31,16 @@ const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const preScanAccounts = new Map<string, Record<string, Account>>();
 let scanProgress: ScanProgress | null = null;
 let scanTabId: number | null = null;
+/** Whether the running scan was started by the user or by the unfollow-alert watcher. */
+let scanKind: "manual" | "watch" = "manual";
+/** Small popup window the watcher scans in (null when idle). */
+let watchWindowId: number | null = null;
+let watchTabId: number | null = null;
+let watchTimeout: ReturnType<typeof setTimeout> | null = null;
+let watchKeepalive: ReturnType<typeof setInterval> | null = null;
+const isWatchTab = (tabId: number | undefined) => tabId != null && tabId === watchTabId;
+/** Tabs we drive ourselves (hidden worker + watch window); never treated as the user's tab. */
+const isOurTab = (tabId: number | undefined) => isWorkerTab(tabId) || isWatchTab(tabId);
 let aiProgress: AiRunProgress | null = null;
 let aiCancel = false;
 
@@ -89,18 +102,21 @@ chrome.alarms.onAlarm.addListener((alarm) => {
       const q = await getQueue();
       if (q.status === "idle" && !nextQueued(q)) await closeWorkerTab();
     })();
+  } else if (alarm.name === WATCH_ALARM) {
+    void runWatchCheck("alarm");
   }
 });
 
 void recoverOnStartup();
+void recoverWatch();
 
 // ---------- tab helpers for scans ----------
 
 async function findXTab(): Promise<chrome.tabs.Tab> {
   const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  if (active?.id != null && active.url && X_URL_RE.test(active.url) && !isWorkerTab(active.id)) return active;
+  if (active?.id != null && active.url && X_URL_RE.test(active.url) && !isOurTab(active.id)) return active;
   const all = await chrome.tabs.query({ url: ["https://x.com/*", "https://twitter.com/*"] });
-  const live = all.find((t) => t.id != null && !isWorkerTab(t.id));
+  const live = all.find((t) => t.id != null && !isOurTab(t.id));
   if (live) return live;
   const created = await chrome.tabs.create({ url: "https://x.com/home", active: true });
   await waitForReady(created.id!, 30000);
@@ -133,7 +149,7 @@ async function handleContent(msg: ContentRequest, sender: chrome.runtime.Message
   switch (msg.type) {
     case "CS_READY": {
       notifyReady(tabId, msg.page);
-      if (!isWorkerTab(tabId)) broadcast({ type: "PAGE_INFO", page: msg.page });
+      if (!isOurTab(tabId)) broadcast({ type: "PAGE_INFO", page: msg.page });
       return { ok: true };
     }
     case "SCAN_BATCH": {
@@ -148,6 +164,7 @@ async function handleContent(msg: ContentRequest, sender: chrome.runtime.Message
     }
     case "SCAN_FINISHED": {
       const s = await loadSnapshot(msg.owner, msg.list, true);
+      let diff: { added: string[]; removed: string[] } | null = null;
       if (s) {
         const key = snapshotKey(msg.owner, msg.list);
         if (msg.progress.complete) {
@@ -157,13 +174,17 @@ async function handleContent(msg: ContentRequest, sender: chrome.runtime.Message
           const history = await getHistory(msg.owner, msg.list);
           const r = applyScanDiff(s, history, scanned, before);
           await saveHistory(msg.owner, msg.list, r.history);
+          diff = { added: r.added, removed: r.removed };
         }
         preScanAccounts.delete(key);
         await flushSave(s);
       }
       scanProgress = { ...msg.progress, running: false };
+      const wasWatch = scanKind === "watch" && isWatchTab(tabId);
       broadcast({ type: "SCAN_PROGRESS", progress: scanProgress });
       broadcast({ type: "STATE_CHANGED" });
+      if (wasWatch) await finishWatch(msg.owner, diff, msg.progress.error ?? (msg.progress.complete ? undefined : "The check was interrupted."));
+      else if (diff && msg.list === "followers") await noteManualDiff(msg.owner, diff);
       return { ok: true };
     }
     case "WORKER_PAUSE_REQUEST": {
@@ -180,28 +201,41 @@ async function handleContent(msg: ContentRequest, sender: chrome.runtime.Message
 // ---------- panel / options messages ----------
 
 async function getState(): Promise<AppState> {
-  const [settings, queue, snapshots, hasPerm] = await Promise.all([
+  const [settings, queue, snapshots, hasPerm, watch] = await Promise.all([
     getSettings(),
     getQueue(),
     listSnapshots(),
     chrome.permissions.contains({ origins: [ANTHROPIC_ORIGIN] }),
+    getWatch(),
   ]);
   let page: PageInfo | null = null;
   try {
     const tab = (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0];
-    if (tab?.id != null && tab.url && X_URL_RE.test(tab.url) && !isWorkerTab(tab.id)) {
+    if (tab?.id != null && tab.url && X_URL_RE.test(tab.url) && !isOurTab(tab.id)) {
       page = pageByTab.get(tab.id) ?? (await sendToTab<PageInfo>(tab.id, { type: "GET_PAGE_INFO" }).catch(() => null));
     }
     if (!page) {
-      // Any other x.com tab we know about (not the worker).
-      for (const [id, p] of pageByTab) if (!isWorkerTab(id) && p.loggedInHandle) { page = p; break; }
+      // Any other x.com tab we know about (not ours).
+      for (const [id, p] of pageByTab) if (!isOurTab(id) && p.loggedInHandle) { page = p; break; }
     }
   } catch { /* ignore */ }
-  return { page, scan: scanProgress, queue, ai: aiProgress, settings, snapshots, hasAnthropicPermission: hasPerm };
+  return { page, scan: scanProgress, queue, ai: aiProgress, settings, snapshots, hasAnthropicPermission: hasPerm, watch };
+}
+
+/** Kick off the content-script scanner in `tabId`, which must already be on `owner`'s `list` page. */
+async function beginScan(tabId: number, owner: string, list: ListKind, kind: "manual" | "watch"): Promise<void> {
+  const s = (await loadSnapshot(owner, list, true))!;
+  preScanAccounts.set(snapshotKey(owner, list), { ...s.accounts });
+  s.startedAt = Date.now();
+  scanTabId = tabId;
+  scanKind = kind;
+  scanProgress = { owner, list, scanned: Object.keys(s.accounts).length, newThisRun: 0, idleRounds: 0, running: true, complete: false };
+  await sendToTab(tabId, { type: "SCAN_START", list, known: Object.keys(s.accounts) });
+  broadcast({ type: "SCAN_PROGRESS", progress: scanProgress });
 }
 
 async function startScan(list: ListKind): Promise<{ ok: boolean; error?: string }> {
-  if (scanProgress?.running) return { ok: false, error: "A scan is already running." };
+  if (scanProgress?.running) return { ok: false, error: scanKind === "watch" ? "An automatic follower check is running. Wait for it to finish." : "A scan is already running." };
   const tab = await findXTab();
   const tabId = tab.id!;
   if (!(await isContentAlive(tabId))) {
@@ -210,15 +244,174 @@ async function startScan(list: ListKind): Promise<{ ok: boolean; error?: string 
   }
   const me = await loggedInHandle(tabId);
   await ensureOnList(tabId, me, list);
-  const s = (await loadSnapshot(me, list, true))!;
-  preScanAccounts.set(snapshotKey(me, list), { ...s.accounts });
-  s.startedAt = Date.now();
-  scanTabId = tabId;
-  scanProgress = { owner: me, list, scanned: Object.keys(s.accounts).length, newThisRun: 0, idleRounds: 0, running: true, complete: false };
-  await sendToTab(tabId, { type: "SCAN_START", list, known: Object.keys(s.accounts) });
-  broadcast({ type: "SCAN_PROGRESS", progress: scanProgress });
+  await beginScan(tabId, me, list, "manual");
   return { ok: true };
 }
+
+// ---------- unfollow alerts (periodic background follower check) ----------
+
+const WATCH_SCAN_TIMEOUT_MS = 20 * 60_000;
+const NOTIFICATION_ID = "xff-unfollow";
+
+function broadcastWatch(w: WatchState): void {
+  broadcast({ type: "WATCH_UPDATED", watch: w });
+}
+
+async function setBadge(w: WatchState): Promise<void> {
+  const text = badgeText(w.unseenLeft.length);
+  await chrome.action.setBadgeText({ text }).catch(() => undefined);
+  if (text) await chrome.action.setBadgeBackgroundColor({ color: "#f4212e" }).catch(() => undefined);
+}
+
+const intervalHours = (settings: Settings) => clampIntervalHours(settings.watchIntervalHours, WATCH_INTERVALS_H);
+
+/** Make the alarm match the settings. Called on install, startup and whenever settings are saved. */
+async function syncWatchSchedule(): Promise<void> {
+  const settings = await getSettings();
+  const w = await getWatch();
+  const existing = await chrome.alarms.get(WATCH_ALARM);
+  if (!settings.watchEnabled) {
+    if (existing) await chrome.alarms.clear(WATCH_ALARM);
+    if (w.nextRunAt) { delete w.nextRunAt; await saveWatch(w); broadcastWatch(w); }
+    await setBadge(w);
+    return;
+  }
+  const period = intervalHours(settings) * 60;
+  if (!existing || existing.periodInMinutes !== period) {
+    // First automatic run after one full period; "Check now" in the panel runs one immediately.
+    await chrome.alarms.create(WATCH_ALARM, { periodInMinutes: period, delayInMinutes: period });
+    w.nextRunAt = Date.now() + period * 60_000;
+    await saveWatch(w);
+    broadcastWatch(w);
+  }
+  await setBadge(w);
+}
+
+/** Which account to watch: the one logged in somewhere, else the most recently scanned followers list. */
+async function watchOwner(): Promise<string | null> {
+  for (const [id, p] of pageByTab) if (!isOurTab(id) && p.loggedInHandle) return p.loggedInHandle;
+  const snaps = (await listSnapshots()).filter((s) => s.list === "followers").sort((a, b) => b.updatedAt - a.updatedAt);
+  return snaps[0]?.owner ?? null;
+}
+
+async function closeWatchWindow(): Promise<void> {
+  if (watchTimeout) { clearTimeout(watchTimeout); watchTimeout = null; }
+  if (watchKeepalive) { clearInterval(watchKeepalive); watchKeepalive = null; }
+  const id = watchWindowId;
+  watchWindowId = null;
+  watchTabId = null;
+  if (id != null) await chrome.windows.remove(id).catch(() => undefined);
+}
+
+async function runWatchCheck(reason: "alarm" | "manual"): Promise<{ ok: boolean; error?: string }> {
+  const settings = await getSettings();
+  if (reason === "alarm" && !settings.watchEnabled) return { ok: false, error: "Unfollow alerts are off." };
+  if (scanProgress?.running) return { ok: false, error: "A scan is already running." };
+  const q = await getQueue();
+  if (q.status === "running") return { ok: false, error: "The action queue is running; the check will happen next time." };
+  const owner = await watchOwner();
+  let w = await getWatch();
+  if (!owner) {
+    w = recordFailure(w, "Scan your followers once from the panel first.", Date.now(), intervalHours(settings));
+    await saveWatch(w);
+    broadcastWatch(w);
+    return { ok: false, error: w.lastError };
+  }
+  w = { ...w, owner, running: true };
+  delete w.lastError;
+  await saveWatch(w);
+  broadcastWatch(w);
+
+  try {
+    // A small, unfocused window: X only loads more of the list while the page is rendering, which hidden tabs never do.
+    const win = await chrome.windows.create({
+      url: `https://x.com/${owner}/followers`, type: "popup", focused: false, width: 420, height: 640, left: 40, top: 40,
+    });
+    watchWindowId = win?.id ?? null;
+    watchTabId = win?.tabs?.[0]?.id ?? null;
+    if (watchTabId == null) throw new Error("Could not open the check window.");
+    if (watchWindowId != null) { w.windowId = watchWindowId; await saveWatch(w); }
+    await waitForReady(watchTabId, 30000);
+    const me = await loggedInHandle(watchTabId);
+    if (me.toLowerCase() !== owner.toLowerCase()) throw new Error(`Logged in as @${me}, but the watched list belongs to @${owner}.`);
+    await new Promise((r) => setTimeout(r, 1500));
+    watchKeepalive = setInterval(() => void chrome.runtime.getPlatformInfo(), 20000);
+    watchTimeout = setTimeout(() => void finishWatch(owner, null, "The check took too long and was stopped."), WATCH_SCAN_TIMEOUT_MS);
+    await beginScan(watchTabId, owner, "followers", "watch");
+    return { ok: true };
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    await finishWatch(owner, null, error);
+    return { ok: false, error };
+  }
+}
+
+/** Called once per check, whether it finished, failed or timed out. */
+async function finishWatch(owner: string, diff: { added: string[]; removed: string[] } | null, error?: string): Promise<void> {
+  if (scanProgress?.running && scanKind === "watch") scanProgress = { ...scanProgress, running: false, ...(error ? { error } : {}) };
+  await closeWatchWindow();
+  const settings = await getSettings();
+  let w = await getWatch();
+  const now = Date.now();
+  if (error || !diff) {
+    w = recordFailure(w, error ?? "The check did not complete.", now, intervalHours(settings));
+  } else {
+    w = recordCheck(w, diff, now, intervalHours(settings));
+    delete w.lastError;
+    if (diff.removed.length && settings.watchNotify) {
+      const s = await loadSnapshot(owner, "followers");
+      const { title, message } = notificationText(diff.removed, s?.departed ?? {}, diff.added.length);
+      chrome.notifications.create(NOTIFICATION_ID, {
+        type: "basic", iconUrl: chrome.runtime.getURL("icons/icon128.png"), title, message, priority: 1,
+      }, () => void chrome.runtime.lastError);
+    }
+  }
+  delete w.windowId;
+  if (!settings.watchEnabled) delete w.nextRunAt;
+  await saveWatch(w);
+  await setBadge(w);
+  broadcastWatch(w);
+  broadcast({ type: "STATE_CHANGED" });
+}
+
+/** The worker was restarted while a check was running: its in-memory state is gone, so close the window and record a failure. */
+async function recoverWatch(): Promise<void> {
+  const w = await getWatch();
+  if (!w.running) { await setBadge(w); return; }
+  if (w.windowId != null) await chrome.windows.remove(w.windowId).catch(() => undefined);
+  const settings = await getSettings();
+  const next = recordFailure(w, "The check was interrupted.", Date.now(), intervalHours(settings));
+  delete next.windowId;
+  if (!settings.watchEnabled) delete next.nextRunAt;
+  await saveWatch(next);
+  await setBadge(next);
+}
+
+/** A manual scan from the panel also feeds the badge, so departures are never silently lost. */
+async function noteManualDiff(owner: string, diff: { added: string[]; removed: string[] }): Promise<void> {
+  if (!diff.added.length && !diff.removed.length) return;
+  const settings = await getSettings();
+  let w = await getWatch();
+  w = recordCheck({ ...w, owner: w.owner ?? owner }, diff, Date.now(), intervalHours(settings));
+  if (!settings.watchEnabled) delete w.nextRunAt;
+  else { const a = await chrome.alarms.get(WATCH_ALARM); if (a?.scheduledTime) w.nextRunAt = a.scheduledTime; }
+  await saveWatch(w);
+  await setBadge(w);
+  broadcastWatch(w);
+}
+
+chrome.notifications.onClicked.addListener((id) => {
+  if (id !== NOTIFICATION_ID) return;
+  chrome.notifications.clear(id);
+  void (async () => {
+    const tab = await findXTab();
+    if (tab.id != null) await chrome.tabs.update(tab.id, { active: true });
+    if (tab.windowId != null) {
+      await chrome.windows.update(tab.windowId, { focused: true }).catch(() => undefined);
+      await chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => undefined);
+    }
+  })();
+});
 
 async function queueAdd(req: Extract<PanelRequest, { type: "QUEUE_ADD" }>) {
   const settings = await getSettings();
@@ -369,7 +562,17 @@ async function handlePanel(msg: PanelRequest): Promise<unknown> {
     case "GET_SETTINGS": return getSettings();
     case "SAVE_SETTINGS": {
       await saveSettings(msg.settings as Settings);
+      await syncWatchSchedule();
       broadcast({ type: "STATE_CHANGED" });
+      return { ok: true };
+    }
+    case "GET_WATCH": return getWatch();
+    case "WATCH_CHECK_NOW": return runWatchCheck("manual");
+    case "WATCH_SEEN": {
+      const w = markSeen(await getWatch());
+      await saveWatch(w);
+      await setBadge(w);
+      broadcastWatch(w);
       return { ok: true };
     }
     case "AI_ESTIMATE": return aiEstimate(msg);
@@ -395,6 +598,12 @@ chrome.runtime.onMessage.addListener((msg: PanelRequest | ContentRequest, sender
 chrome.tabs.onRemoved.addListener((tabId) => {
   forgetTab(tabId);
   onWorkerTabClosed(tabId);
+  if (isWatchTab(tabId) && scanProgress?.running && scanKind === "watch") {
+    const owner = scanProgress.owner;
+    watchTabId = null;
+    void finishWatch(owner, null, "The check window was closed.");
+    return;
+  }
   if (scanTabId === tabId && scanProgress?.running) {
     scanProgress = { ...scanProgress, running: false, error: "Tab closed." };
     broadcast({ type: "SCAN_PROGRESS", progress: scanProgress });

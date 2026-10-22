@@ -1,6 +1,6 @@
 {
   "name": "x-follower-filter",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Scan your X (Twitter) followers and following, group them by bio keywords or AI labels, review, then remove or unfollow the ones you choose.",
   "private": true,
   "type": "module",

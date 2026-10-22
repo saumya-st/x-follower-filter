@@ -104,7 +104,12 @@ export const DEFAULT_SETTINGS: Settings = {
   aiAllowOther: true,
   botThreshold: 60,
   keepWorkerTab: false,
+  watchEnabled: false,
+  watchIntervalHours: 12,
+  watchNotify: true,
 };
+
+export const WATCH_INTERVALS_H = [3, 6, 12, 24, 48];
 
 export const AI_BATCH_SIZE = 40;
 export const ANTHROPIC_ORIGIN = "https://api.anthropic.com/*";

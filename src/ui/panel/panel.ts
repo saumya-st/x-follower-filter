@@ -1,6 +1,6 @@
 import type { AppState, Broadcast } from "../../shared/messages";
 import { sendToBackground } from "../../shared/messages";
-import type { Account, ActionKind, AiRunProgress, Label, LabelHit, ListKind, Preset, Queue, ScanSnapshot, Settings } from "../../shared/types";
+import type { Account, ActionKind, AiRunProgress, Label, LabelHit, ListKind, Preset, Queue, ScanSnapshot, Settings, WatchState } from "../../shared/types";
 import type { AiLabelMap } from "../../shared/storage";
 import { MODELS, PRESETS, SPAM_LABEL_ID, UNDO_SECONDS } from "../../shared/defaults";
 import { nonMutuals } from "../../shared/history";
@@ -68,6 +68,14 @@ const currentList = (): ListKind => (tab === "following" ? "following" : "follow
 const actionFor = (list: ListKind): ActionKind => (list === "followers" ? "remove" : "unfollow");
 const verb = (action: ActionKind) => (action === "remove" ? "Remove" : "Unfollow");
 const loggedIn = () => state?.page?.loggedInHandle ?? null;
+
+function until(ts: number): string {
+  const s = (ts - Date.now()) / 1000;
+  if (s < 60) return "soon";
+  if (s < 3600) return `in ${Math.round(s / 60)} min`;
+  if (s < 86400) return `in ${Math.round(s / 3600)} h`;
+  return `in ${Math.round(s / 86400)} d`;
+}
 
 function ago(ts: number): string {
   const s = Math.max(0, (Date.now() - ts) / 1000);
@@ -160,7 +168,7 @@ function renderCounts() {
   el.cntFollowers.textContent = f ? fmt(Object.keys(f.accounts).length) : "";
   el.cntFollowing.textContent = g ? fmt(Object.keys(g.accounts).length) : "";
   const d = f?.lastDiff;
-  el.changesPip.hidden = !(d && (d.added.length || d.removed.length));
+  el.changesPip.hidden = !((d && (d.added.length || d.removed.length)) || state?.watch?.unseenLeft.length);
 }
 
 function renderWho() {
@@ -815,6 +823,8 @@ function renderChanges() {
     host.appendChild(panel);
   }
 
+  host.appendChild(renderWatchCard());
+
   // Scan metadata
   const meta = document.createElement("div");
   meta.className = "card scanmeta";
@@ -827,6 +837,35 @@ function renderChanges() {
   meta.innerHTML = line("followers", f) + line("following", g) + `<div class="small muted">Changes are computed between complete scans. Rescan regularly to keep this up to date.</div>`;
   meta.querySelectorAll<HTMLButtonElement>("[data-scan]").forEach((b) => b.addEventListener("click", () => void startScan(b.dataset.scan as ListKind)));
   host.appendChild(meta);
+}
+
+// ---------- unfollow alerts ----------
+function renderWatchCard(): HTMLElement {
+  const w = state?.watch;
+  const card = document.createElement("div");
+  card.className = "card watchcard";
+  if (!settings?.watchEnabled || !w) {
+    card.innerHTML = `<div class="small"><b>Unfollow alerts are off.</b> <span class="muted">Turn them on to rescan your followers every few hours and get a notification when someone leaves.</span></div><button class="sm" id="wSettings">Turn on in Settings</button>`;
+    card.querySelector("#wSettings")?.addEventListener("click", () => void sendToBackground({ type: "OPEN_OPTIONS" }));
+    return card;
+  }
+  const parts = [w.running ? "Checking now…" : w.lastRunAt ? `Last check ${ago(w.lastRunAt)}` : "No check yet"];
+  if (!w.running && w.nextRunAt) parts.push(`next ${until(w.nextRunAt)}`);
+  card.innerHTML = `<div class="small"><b>Unfollow alerts are on</b>${w.owner ? ` for @${escapeHtml(w.owner)}` : ""}. <span class="muted">${escapeHtml(parts.join(" · "))}</span></div>${w.lastError ? `<div class="small err">${escapeHtml(w.lastError)}</div>` : ""}<button class="sm ghost" id="wCheck" ${w.running || state?.scan?.running ? "disabled" : ""}>Check now</button>`;
+  card.querySelector("#wCheck")?.addEventListener("click", async (e) => {
+    (e.currentTarget as HTMLButtonElement).disabled = true;
+    try {
+      const r = await sendToBackground({ type: "WATCH_CHECK_NOW" });
+      if (!r.ok) toast(r.error ?? "Could not start the check.", "error");
+      else toast("Checking your followers in a small background window…", "ok");
+    } catch (err) { toast(errMsg(err), "error"); }
+  });
+  return card;
+}
+
+function markWatchSeen() {
+  const w = state?.watch;
+  if (w && (w.unseenLeft.length || w.unseenNew)) void sendToBackground({ type: "WATCH_SEEN" });
 }
 
 // ---------- help ----------
@@ -845,7 +884,7 @@ function openHelp() {
         <li>Actions run slowly in a hidden background tab, with an hourly limit you can change in Settings. Pause any time.</li>
       </ul>
       <h3>Changes</h3>
-      <p>After a second scan, the Changes tab shows new followers, who unfollowed you and who does not follow back.</p>
+      <p>After a second scan, the Changes tab shows new followers, who unfollowed you and who does not follow back. Turn on <b>Unfollow alerts</b> in Settings to rescan automatically every few hours and get notified when someone leaves.</p>
       <h3>Label with AI (optional)</h3>
       <p>Found under ⋯. Sends bios to Claude with your own API key to categorise accounts your keywords miss. Shows the cost before anything runs.</p>
     </div>
@@ -890,6 +929,7 @@ function switchTab(t: Tab) {
   const changes = t === "changes";
   el.viewList.hidden = changes;
   el.viewChanges.hidden = !changes;
+  if (changes) markWatchSeen();
   selected.clear();
   activePreset = null;
   for (const cb of flagBoxes()) cb.checked = false;
@@ -993,6 +1033,11 @@ chrome.runtime.onMessage.addListener((msg: Broadcast) => {
     }
     case "STATE_CHANGED":
       void refreshState();
+      break;
+    case "WATCH_UPDATED":
+      if (state) state.watch = msg.watch;
+      renderCounts();
+      if (tab === "changes") { renderChanges(); markWatchSeen(); }
       break;
   }
 });

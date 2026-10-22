@@ -1,7 +1,8 @@
-import { ANTHROPIC_ORIGIN, DEFAULT_LABELS, MODELS } from "../../shared/defaults";
+import { ANTHROPIC_ORIGIN, DEFAULT_LABELS, MODELS, WATCH_INTERVALS_H } from "../../shared/defaults";
 import { sendToBackground } from "../../shared/messages";
 import { normalizeHandle } from "../../shared/rules";
 import { clearAllData } from "../../shared/storage";
+import { clampIntervalHours } from "../../shared/watch";
 import type { Label, Settings } from "../../shared/types";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -11,6 +12,7 @@ const el = {
   grantPerm: $<HTMLButtonElement>("grantPerm"), permStatus: $("permStatus"), pricing: $("pricing"),
   minDelay: $<HTMLInputElement>("minDelay"), maxDelay: $<HTMLInputElement>("maxDelay"), maxPerHour: $<HTMLInputElement>("maxPerHour"),
   botThreshold: $<HTMLInputElement>("botThreshold"), botThresholdVal: $("botThresholdVal"), keepWorkerTab: $<HTMLInputElement>("keepWorkerTab"),
+  watchEnabled: $<HTMLInputElement>("watchEnabled"), watchInterval: $<HTMLSelectElement>("watchInterval"), watchNotify: $<HTMLInputElement>("watchNotify"),
   protected: $<HTMLTextAreaElement>("protected"), clearData: $<HTMLButtonElement>("clearData"), save: $<HTMLButtonElement>("save"),
 };
 
@@ -61,6 +63,10 @@ function renderPricing() {
   el.pricing.textContent = `${m.name}: $${m.inputPerM}/M input, $${m.outputPerM}/M output tokens. Labelling 1,000 accounts costs roughly $${per1k.toFixed(2)}.${m.supportsFallback ? "" : " No server-side refusal fallback on this model."}`;
 }
 
+function syncWatchInputs() {
+  el.watchInterval.disabled = el.watchNotify.disabled = !el.watchEnabled.checked;
+}
+
 async function refreshPerm() {
   const has = await chrome.permissions.contains({ origins: [ANTHROPIC_ORIGIN] });
   el.permStatus.textContent = has ? "Granted." : "Not granted (needed for AI labelling).";
@@ -88,6 +94,11 @@ async function load() {
   el.botThreshold.value = String(settings.botThreshold);
   el.botThresholdVal.textContent = String(settings.botThreshold);
   el.keepWorkerTab.checked = settings.keepWorkerTab;
+  el.watchInterval.innerHTML = WATCH_INTERVALS_H.map((h) => `<option value="${h}">${h < 24 ? `Every ${h} hours` : h === 24 ? "Once a day" : `Every ${h / 24} days`}</option>`).join("");
+  el.watchEnabled.checked = settings.watchEnabled;
+  el.watchInterval.value = String(clampIntervalHours(settings.watchIntervalHours, WATCH_INTERVALS_H));
+  el.watchNotify.checked = settings.watchNotify;
+  syncWatchInputs();
   el.protected.value = settings.protectedHandles.map((h) => `@${h}`).join("\n");
   renderPricing();
   await refreshPerm();
@@ -117,6 +128,9 @@ async function save() {
     maxPerHour: Math.max(1, Math.min(500, Number(el.maxPerHour.value) || 60)),
     botThreshold: Math.max(30, Math.min(90, Number(el.botThreshold.value) || 60)),
     keepWorkerTab: el.keepWorkerTab.checked,
+    watchEnabled: el.watchEnabled.checked,
+    watchIntervalHours: clampIntervalHours(Number(el.watchInterval.value), WATCH_INTERVALS_H),
+    watchNotify: el.watchNotify.checked,
     protectedHandles: splitList(el.protected.value).map(normalizeHandle).filter(Boolean),
   };
   await sendToBackground({ type: "SAVE_SETTINGS", settings: next });
@@ -139,6 +153,7 @@ el.resetLabels.addEventListener("click", () => {
   renderLabels();
 });
 el.model.addEventListener("change", renderPricing);
+el.watchEnabled.addEventListener("change", syncWatchInputs);
 el.botThreshold.addEventListener("input", () => (el.botThresholdVal.textContent = el.botThreshold.value));
 el.grantPerm.addEventListener("click", async () => {
   const ok = await chrome.permissions.request({ origins: [ANTHROPIC_ORIGIN] });

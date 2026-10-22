@@ -1,5 +1,5 @@
 import type {
-  Account, ActionKind, ActionResult, AiRunProgress, ListKind, PageInfo, Queue, ScanProgress, ScanSnapshot, Settings,
+  Account, ActionKind, ActionResult, AiRunProgress, ListKind, PageInfo, Queue, ScanProgress, ScanSnapshot, Settings, WatchState,
 } from "./types";
 import type { AiLabelMap } from "./storage";
 
@@ -23,7 +23,10 @@ export type PanelRequest =
   | { type: "AI_RUN"; owner: string; list: ListKind; handles: string[] }
   | { type: "AI_CANCEL" }
   | { type: "GET_AI_LABELS" }
-  | { type: "OPEN_OPTIONS" };
+  | { type: "OPEN_OPTIONS" }
+  | { type: "GET_WATCH" }
+  | { type: "WATCH_CHECK_NOW" }
+  | { type: "WATCH_SEEN" };
 
 /** Content script -> service worker. */
 export type ContentRequest =
@@ -47,7 +50,8 @@ export type Broadcast =
   | { type: "SCAN_PROGRESS"; progress: ScanProgress }
   | { type: "QUEUE_UPDATED"; queue: Queue; finished?: { handle: string; list: ListKind; ok: boolean } }
   | { type: "AI_PROGRESS"; progress: AiRunProgress }
-  | { type: "PAGE_INFO"; page: PageInfo | null };
+  | { type: "PAGE_INFO"; page: PageInfo | null }
+  | { type: "WATCH_UPDATED"; watch: WatchState };
 
 export interface AppState {
   page: PageInfo | null;
@@ -57,6 +61,7 @@ export interface AppState {
   settings: Settings;
   snapshots: { owner: string; list: ListKind; count: number; updatedAt: number }[];
   hasAnthropicPermission: boolean;
+  watch: WatchState;
 }
 
 export type AiEstimate = {
@@ -78,6 +83,7 @@ export type ResponseFor<T extends PanelRequest> =
   T extends { type: "QUEUE_ADD" } ? OkResponse & { added: number; skipped: number; duplicates: number } :
   T extends { type: "AI_ESTIMATE" } ? AiEstimate :
   T extends { type: "GET_AI_LABELS" } ? AiLabelMap :
+  T extends { type: "GET_WATCH" } ? WatchState :
   OkResponse;
 
 export type StepResponse = ActionResult;
